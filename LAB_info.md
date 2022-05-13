@@ -28,6 +28,38 @@
    - Output
      - [8-1:0] out_max, out_min
      - out_valid
+## Lab04: Sequence(FSM)
+1. Lab Description
+   - Design a FSM to detect any 3 continuous bit(0 or 1) in the given sequence.
+2. Port declaration
+   - Input
+     - clk, rst_n, in_data, in_state_reset
+   - Output
+     - out
+     - [3-1:0] out_cur_state
+## Lab05: AHB interconnect
+1. Lab Description
+   - Masters will send input data to interconnect
+   - Decode input data for `valid`, `address` and `value`
+   - Based on master priority(1->2->3), send data to slave memory
+   - Output handshake signal
+2. Port declaration
+   - Input
+     - clk, rst_n, in_valid_1, in_valid_2, in_valid_3, ready_slave1, ready_slave2
+     - [7-1:0] data_in_1, data_in_2, data_in_3
+   - Output
+     - valid_slave1, valid_slave2, handshake_slave1, handshake_slave2
+     - [3-1:0] addr_out, value_out
+## Lab06: Floating Point Computation(bfloat16)
+1. Lab Description
+   - Design a module to compute addition and multiplication of float number in `bfloat16` format
+2. Port declaration
+   - Input
+     - clk, rst_n, in_valid, mode
+     - [16-1:0] in_a, in_b
+   - Output
+     - out_valid
+     - [16-1:0] out
 ---
 /**************************** Template ******************************/
 ## Labxx: 
