@@ -60,13 +60,35 @@
    - Output
      - out_valid
      - [16-1:0] out
----
-/**************************** Template ******************************/
-## Labxx: 
+## Lab07: Pattern.sv practice
 1. Lab Description
-   - 
+   - Write a pattern file to detect multiple errors in a design
+2. Port declaration(lab07.sv)
+   - Input
+     - clk, rst_n, in_valid
+     - [2-1:0] mode (0: add(1, 2), 1: sub(2, 1), 2: sub(4, 3), 3: sub(1, 4))
+     - [4-1:0] in_number (four numbers each input)
+   - Output
+     - out_valid
+     - [7-1:0] out_result
+## Lab08: Pipeline
+1. Lab Description
+   - divide the computation of large number into several stages
 2. Port declaration
    - Input
+     - clk, rst_n, in_valid
+     - [47-1:0] in_1, in_2
+     - [48-1:0] in_3
    - Output
-   - 
-/**************************** Template ******************************/
+     - out_valid
+     - [96-1:0] out (out = (in_1 + in_2) * in_3))
+## Lab09: Clock Domain Crossing(CDC)
+1. Lab Description
+   - CDC : when the data launched and captured by 2 different clock domain, this case is called CDC.
+2. Port declaration
+   - Input (clock1 domain)
+     - clk1, clk2, rst_n, in_valid, mode
+     - [4-1:0] in_a, in_b
+   - Output (clock2 domain)
+     - out_valid
+     - [8-1:0] out
