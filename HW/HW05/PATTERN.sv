@@ -1,183 +1,200 @@
-`ifdef RTL
-	`timescale 1ns/10ps
-	`include "JAM.sv"  
-	`define CYCLE_TIME 5.0
-`endif
-`ifdef GATE
-	`timescale 1ns/10ps
-	`include "JAM_SYN.v"
-	`define CYCLE_TIME 5.0
-`endif
+`define CYCLE_TIME 3.5
 module PATTERN(
   // Input signals
-	clk,
-	rst_n,
-    in_valid,
-    in_cost,
+  clk,
+  rst_n,
+  image_valid,
+  filter_valid,
+  in_data,
   // Output signals
-	out_valid,
-    out_job,
-	out_cost
+  out_valid,
+  out_data
 );
 //================================================================
 // wire & registers 
 //================================================================
-output logic clk, rst_n, in_valid;
-output logic [6:0] in_cost;
+output logic clk, rst_n, image_valid, filter_valid;
+output logic [3:0] in_data;
+input [15:0] out_data;
 input out_valid;
-input [3:0] out_job;
-input [9:0] out_cost;
+
+logic signed [3:0] golden_filter1;
+logic signed [3:0] golden_filter2;
+logic signed [3:0] golden_in;
+logic [15:0] golden_out;
+//================================================================
+// parameters & integer
+//================================================================
+integer PATNUM;
+integer input_file, output_file;
+integer i, j, k, cnt;
+integer patcount;
+integer gap;
+integer lat, total_cycles, start;
+integer out_cycles;
 
 //================================================================
 // clock
 //================================================================
-real CYCLE = `CYCLE_TIME;
-always #(CYCLE / 2.0) clk = ~clk;
-//================================================================
-// parameters or constants
-//================================================================
-parameter OUTPUT_MAX_DELAY = 400000;
-//================================================================
-// variables
-//================================================================
-integer input_file, output_file;
-integer total_cycles;
-integer job_cost;
-integer PATTERN_NUM;
-integer INPUT_DELAY_LATENCY;
-integer DATA_INPUT_I;
-integer WAIT_OUT_VALID_DELAY;
-integer K;
-integer CHECK_ANS_I, CHECK_ANS_J;
-integer golden_out_cost;
-integer golden_out_job [0:7];
+real	CYCLE = `CYCLE_TIME;
+always	#(CYCLE/2.0) clk = ~clk;
+
+
 //================================================================
 // initial
 //================================================================
 initial begin
-	input_file=$fopen("../00_TESTBED/inputc.txt","r"); // $fopen(filename,mode)
-    output_file=$fopen("../00_TESTBED/outputc.txt","r");
+    rst_n = 1'b1;
+    image_valid = 0;
+    filter_valid = 0;
+    in_data = 'bx;
+    start = 0;
+    total_cycles = 0;
+
+    input_file = $fopen("../00_TESTBED/input.txt","r");
+	output_file = $fopen("../00_TESTBED/output.txt","r");
+
+	force clk = 0;
 	RESET_TASK;
-	while(1) begin
-		INPUT_DELAY;
-		in_valid = 1;
-		K = $fscanf(input_file,"%d", in_cost);
-		if($feof(input_file) == 1) begin
-			YOU_PASS_task;
-			$fclose(input_file);
-			$fclose(output_file);
-			#(30.0) $finish;
-		end
-		else begin
-			DATA_INPUT;
-			WAIT_OUT_VALID;
-			CHECK_ANS;
-			CHECK_PULL_DOWN;
-			$display("Pattern %d is done",PATTERN_NUM);
-			PATTERN_NUM = PATTERN_NUM + 1;
-		end
-	end
+
+    k = $fscanf(input_file, "%d", PATNUM);
+    start = 1;
+    for(patcount = 0; patcount < PATNUM; patcount = patcount + 1) begin
+		INPUT_TASK;
+        WAIT_OUT_VALID;
+        CHECK_ANS;
+        CHECK_OUT_ZERO;
+    end
+    start = 0;
+    YOU_PASS_task;
 end
 //================================================================
 // task
 //================================================================
+always@(negedge clk) if (start) total_cycles = total_cycles + 1;
+
 task RESET_TASK; begin
-	rst_n = 1; in_valid = 0; in_cost = 7'bx; PATTERN_NUM = 1; total_cycles = 0;
-	force clk = 0;
-	#(1.0);
-	rst_n = 0;
-	#(5.0);
-	if( (out_valid !== 0) || (out_job !== 0) || (out_cost !== 0) ) begin
-		fail;
-        $display ("--------------------------------------------------------------------------------------------------------------------------------------------");
-        $display ("                                                                       FAIL!                                                                ");
-        $display ("                                                        out should be 0 after initial RESET                                                 ");
-        $display ("--------------------------------------------------------------------------------------------------------------------------------------------");
-		#(30.0) $finish;
-	end
-	#(4.0); rst_n = 1;
-	#(10.0);	release clk;
+    #(0.5); rst_n = 0;
+
+    #(2.0);
+    if(out_valid !== 0 || out_data !== 0) begin
+        fail;
+        $display ("-------------------------------------------------------------------------------");
+        $display ("                                 FAIL!                                         ");
+        $display ("                       out should be 0 after initial RESET                     ");
+        $display ("-------------------------------------------------------------------------------");
+        #(100);
+        $finish;
+    end
+
+    #(1.0); rst_n = 1 ;
+    #(30.0); release clk;
 end endtask
 
-task INPUT_DELAY; begin
-	INPUT_DELAY_LATENCY = 5; //$urandom_range(6, 2); //$urandom_range( int unsigned maxval, int unsigned minval = 0 );
-	repeat(INPUT_DELAY_LATENCY) @(negedge clk);
-end endtask
+task INPUT_TASK; begin
+    @(negedge clk);
+    out_cycles = 0;
+    
+    filter_valid = 1;
+    image_valid = 0;
+	for(i = 0; i < 5; i = i + 1) begin
+        k = $fscanf(input_file, "%d", golden_filter1);
+        in_data = golden_filter1;
+        @(negedge clk);
+    end
+	for(i = 0; i < 5; i = i + 1) begin
+        k = $fscanf(input_file, "%d", golden_filter2);
+        in_data = golden_filter2;
+        @(negedge clk);
+    end
 
-task DATA_INPUT; begin
-	if( (out_valid !== 0) ) begin
-		fail;
-		$display ("--------------------------------------------------------------------------------------------------------------------------------------------");
-		$display ("                                                                       FAIL!                                                                ");
-		$display ("                                                        out_valid overlap with in_valid                                                     ");
-		$display ("--------------------------------------------------------------------------------------------------------------------------------------------");
-		$finish;
-	end
-	total_cycles = total_cycles + 1;
-	@(negedge clk);
-	for(DATA_INPUT_I = 0; DATA_INPUT_I < 63; DATA_INPUT_I = DATA_INPUT_I + 1) begin
-		K = $fscanf(input_file, "%d", in_cost); //$fscanf( int file_descriptor, string format, varargs ... args );
-		if( (out_valid !== 0) ) begin
-			fail;
-			$display ("--------------------------------------------------------------------------------------------------------------------------------------------");
-			$display ("                                                                       FAIL!                                                                ");
-			$display ("                                                        out_valid overlap with in_valid                                                     ");
-			$display ("--------------------------------------------------------------------------------------------------------------------------------------------");
-			$finish;
-		end
-		total_cycles = total_cycles + 1;
-		@(negedge clk);
-	end
-	in_valid = 0; in_cost = 7'bx;
+    filter_valid = 0;
+    image_valid = 1;
+    for(i = 0; i < 64; i = i + 1) begin
+        k = $fscanf(input_file, "%d", golden_in);
+        in_data = golden_in;
+        if (out_valid) CHECK_ANS_ATINPUT;
+        @(negedge clk);
+    end
+
+    filter_valid = 0;
+    image_valid = 0;
+    in_data = 'bx;
 end endtask
 
 task WAIT_OUT_VALID; begin
-	WAIT_OUT_VALID_DELAY = 0;
-	while( (out_valid === 0) ) begin
-		if(WAIT_OUT_VALID_DELAY == OUTPUT_MAX_DELAY) begin
-			fail;
-			$display ("--------------------------------------------------------------------------------------------------------------------------------------------");
-			$display ("                                                                       FAIL!                                                                ");
-			$display ("                                                     output delay is greater than 400000 cycles										       ");
-			$display ("--------------------------------------------------------------------------------------------------------------------------------------------");
-			$finish;
-		end
-		WAIT_OUT_VALID_DELAY = WAIT_OUT_VALID_DELAY + 1;
-		total_cycles = total_cycles + 1;
-		@(negedge clk);
-	end
+    lat = 0;
+    while(out_valid !== 1) begin
+        lat = lat + 1;
+        if(lat == 300) begin
+            fail;
+            $display ("--------------------------------------------------------------------------------------------------------------------------------------------");
+            $display ("                                                                       FAIL!                                                                ");
+            $display ("                                                     The execution latency are over 300 cycles                                              ");
+            $display ("--------------------------------------------------------------------------------------------------------------------------------------------");
+            repeat(2)@(negedge clk);
+            $finish;
+        end
+        @(negedge clk);
+    end
+end endtask
+
+task CHECK_ANS_ATINPUT; begin
+    out_cycles = out_cycles + 1;
+    k = $fscanf(output_file, "%d", golden_out);
+    if(out_data !== golden_out) begin
+        fail;
+        $display ("--------------------------------------------------------------------------------------------------------------------------------------------");
+        $display ("                                                          WRONG ANSWER FAIL!                                                                ");
+        $display ("                                                               Pattern No. %3d                                                              ",patcount);
+        $display ("                                                        your output:%7d", $signed(out_data));
+        $display ("                                                      golden answer:%7d", $signed(golden_out));
+        $display ("--------------------------------------------------------------------------------------------------------------------------------------------");
+        #(100)
+        $finish;
+    end
 end endtask
 
 task CHECK_ANS; begin
-	for(CHECK_ANS_I = 0; CHECK_ANS_I < 8; CHECK_ANS_I = CHECK_ANS_I + 1) begin
-		K = $fscanf(output_file, "%d", golden_out_job[CHECK_ANS_I]);
-	end
-	K = $fscanf(output_file, "%d", golden_out_cost);
-	for(CHECK_ANS_J = 0; CHECK_ANS_J < 8; CHECK_ANS_J = CHECK_ANS_J + 1) begin
-		if( (out_cost !== golden_out_cost) || (out_job !== golden_out_job[CHECK_ANS_J]) ) begin
-			fail;
+    for(i = out_cycles; i < 16; i = i + 1) begin
+        // out_cycles = out_cycles + 1;
+        if (out_valid !== 1) begin
+            fail;
             $display ("--------------------------------------------------------------------------------------------------------------------------------------------");
-            $display ("                                                              WRONG ANSWER FAIL!                                                            ");
-            $display ("                                                               Pattern No. %3d                                                              ", PATTERN_NUM);
-            $display ("                                                        your out_cost: %d, golden out_cost: %d                                              ", out_cost, golden_out_cost);
-            $display ("                                                        your out_job : %d, golden out_job : %d                                              ", out_job, golden_out_job[CHECK_ANS_J]);
+            $display ("                                                                       FAIL!                                                                ");
+            $display ("                                                     out_valid should be high for 16 cycles                                                 ");
             $display ("--------------------------------------------------------------------------------------------------------------------------------------------");
-			$finish;
-		end
-		total_cycles = total_cycles + 1;
-		@(negedge clk);
-	end
+            repeat(2)@(negedge clk);
+            $finish;
+        end
+        else begin
+            k = $fscanf(output_file, "%d", golden_out);
+            if(out_data !== golden_out) begin
+                fail;
+                $display ("--------------------------------------------------------------------------------------------------------------------------------------------");
+                $display ("                                                          WRONG ANSWER FAIL!                                                                ");
+                $display ("                                                               Pattern No. %3d                                                              ",patcount);
+                $display ("                                                        your output:%7d", $signed(out_data));
+                $display ("                                                      golden answer:%7d", $signed(golden_out));
+                $display ("--------------------------------------------------------------------------------------------------------------------------------------------");
+                #(100)
+                $finish;
+            end
+            @(negedge clk);
+        end
+    end
 end endtask
 
-task CHECK_PULL_DOWN; begin
-	if( (out_valid !== 0) || (out_cost !== 0) || (out_job !== 0)) begin
-		fail;
+task CHECK_OUT_ZERO; begin
+    if(out_valid !== 0 || out_data !== 0) begin
+        fail;
         $display ("--------------------------------------------------------------------------------------------------------------------------------------------");
-        $display ("                                                                    FAIL!                                                                   ");
-        $display ("                                                   output should be reset after output ended                                                ");
+        $display ("                                                                       FAIL!                                                                ");
+        $display ("                                                           Out should be zero after output                                                  ");
         $display ("--------------------------------------------------------------------------------------------------------------------------------------------");
-		$finish;
-	end
+        repeat(2)@(negedge clk);
+        $finish;
+    end
 end endtask
 
 task YOU_PASS_task;begin
@@ -233,8 +250,8 @@ $display("\033[37mrMvrrirJKur                                                   
 $display ("----------------------------------------------------------------------------------------------------------------------");
 $display ("                                                  Congratulations!                						             ");
 $display ("                                           You have passed all patterns!          						             ");
-$display ("                                                Your total cycle:%d!                                                          ",total_cycles);
-$display ("                                          Your total simulation time:%f ns!                                                          ",total_cycles * CYCLE);
+$display ("                                                Your total latency :%d !                                                          ",total_cycles);
+$display ("                                          Your total simulation time:%d ns!                                                          ",total_cycles* CYCLE);
 $display ("----------------------------------------------------------------------------------------------------------------------");
 $finish;	
 end endtask
@@ -295,3 +312,5 @@ end endtask
 
 
 endmodule
+
+
