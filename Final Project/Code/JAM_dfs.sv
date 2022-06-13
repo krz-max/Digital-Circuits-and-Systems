@@ -60,11 +60,11 @@ logic [6-1:0] counter_reg, counter_nxt;
 // MAKE_ZERO_ROW, MAKE_ZERO_COL
 logic [7-1:0] MIN_VAL_nxt [8-1:0], MIN_VAL_reg [8-1:0];
 // COUNT ZERO
-logic [4-1:0] total_zero_c, total_zero_r;
+logic [4-1:0] total_zero_c [8-1:0], total_zero_r [8-1:0];
 logic [4-1:0] col_zero_count_nxt [8-1:0], col_zero_count_reg [8-1:0], row_zero_count_nxt [8-1:0], row_zero_count_reg [8-1:0];
 // ASSIGN_ROW_TASK
 // ASSIGN_COL_TASK
-logic assign_task_done, ASSIGNMENT_FINISHED, arbitrary_assign;
+logic arbitrary_assign;
 logic [8-1:0] marked_zero_nxt[8-1:0], marked_zero_reg[8-1:0];
 // MAKE_CHECK
 logic [8-1:0] vertical_check_nxt, horizontal_check_nxt, vertical_check_reg, horizontal_check_reg;
@@ -86,26 +86,20 @@ logic [4-1:0] out_job_nxt;
 logic [10-1:0] out_cost_nxt;
 // test
 logic can_assign;
-logic [3-1:0] job_assigned_nxt, job_assigned_reg;
+logic [5-1:0] total_line;
+logic [4-1:0] vertical_line, horizontal_line;
 //---------------------------------------------------------------------
 //   Your design                        
 //---------------------------------------------------------------------
-assign one_zero_row_found = row_zero_count_reg[7] == 1
-						 || row_zero_count_reg[6] == 1
-						 || row_zero_count_reg[5] == 1
-						 || row_zero_count_reg[4] == 1
-						 || row_zero_count_reg[3] == 1
-						 || row_zero_count_reg[2] == 1
-						 || row_zero_count_reg[1] == 1
-						 || row_zero_count_reg[0] == 1;
-assign arbitrary_assign = row_zero_count_reg[7] != 0
-					   || row_zero_count_reg[6] != 0
-					   || row_zero_count_reg[5] != 0
-					   || row_zero_count_reg[4] != 0
-					   || row_zero_count_reg[3] != 0
-					   || row_zero_count_reg[2] != 0
-					   || row_zero_count_reg[1] != 0
-					   || row_zero_count_reg[0] != 0;
+assign one_zero_row_found = marked_zero_nxt != marked_zero_reg;
+assign arbitrary_assign = row_zero_count_nxt[7] != 0
+					   || row_zero_count_nxt[6] != 0
+					   || row_zero_count_nxt[5] != 0
+					   || row_zero_count_nxt[4] != 0
+					   || row_zero_count_nxt[3] != 0
+					   || row_zero_count_nxt[2] != 0
+					   || row_zero_count_nxt[1] != 0
+					   || row_zero_count_nxt[0] != 0;
 always_comb begin
 	for(integer i = 7; i >= 0; i = i - 1) begin
 		for(integer j = 7; j >= 0; j = j - 1) begin
@@ -143,7 +137,22 @@ always_ff @(posedge clk or negedge rst_n) begin
         cost_reg <= cost_nxt;
 	end
 end
-assign can_assign = UNCOVERED_MIN_VAL_reg == 7'b111_1111;
+assign total_line = (state_reg == FIND_UNCOVERED_MIN) ? horizontal_line + vertical_line : 0;
+assign vertical_line = vertical_check_reg[7] + vertical_check_reg[6] + vertical_check_reg[5] + vertical_check_reg[4] 
+				  + vertical_check_reg[3] + vertical_check_reg[2] + vertical_check_reg[1] + vertical_check_reg[0];
+assign horizontal_line = !horizontal_check_reg[7] + !horizontal_check_reg[6] + !horizontal_check_reg[5] + !horizontal_check_reg[4] 
+				  + !horizontal_check_reg[3] + !horizontal_check_reg[2] + !horizontal_check_reg[1] + !horizontal_check_reg[0];
+always_comb begin
+	can_assign =( (marked_zero_reg[7] != 0 
+				&& marked_zero_reg[6] != 0 
+				&& marked_zero_reg[5] != 0 
+				&& marked_zero_reg[4] != 0 
+				&& marked_zero_reg[3] != 0 
+				&& marked_zero_reg[2] != 0 
+				&& marked_zero_reg[1] != 0 
+				&& marked_zero_reg[0] != 0) 
+				|| total_line == 8 );
+end
 // STATE MACHINE
 always_comb begin
 	case(state_reg)
@@ -153,15 +162,15 @@ always_comb begin
 		end
 		INPUT: begin // with MAKE_ZERO_ROW
 			counter_nxt = (counter_reg == 0) ? 15 : counter_reg - 1;
-			state_nxt = (counter_reg == 0) ? MAKE_ZERO_COL : INPUT;
+			state_nxt = (counter_reg == 0) ? MAKE_ZERO_ROW : INPUT;
 		end
 		MAKE_ZERO_COL: begin
-			counter_nxt = (counter_reg == 0) ? 15 : counter_reg - 1;
-			state_nxt = (counter_reg == 0) ? MAKE_ZERO_ROW : MAKE_ZERO_COL;
+			counter_nxt = (counter_reg == 0) ? 0 : counter_reg - 1;
+			state_nxt = (counter_reg == 0) ? COUNT_ZERO : MAKE_ZERO_COL;
 		end
 		MAKE_ZERO_ROW: begin
-			counter_nxt = (counter_reg == 0) ? 7 : counter_reg - 1;
-			state_nxt = (counter_reg == 0) ? COUNT_ZERO : MAKE_ZERO_ROW;
+			counter_nxt = (counter_reg == 0) ? 15 : counter_reg - 1;
+			state_nxt = (counter_reg == 0) ? MAKE_ZERO_COL : MAKE_ZERO_ROW;
 		end
 		COUNT_ZERO: begin
 			counter_nxt = (counter_reg == 0) ? 7 : counter_reg - 1;
@@ -180,7 +189,7 @@ always_comb begin
 			state_nxt = MAKE_VER_CHECK;
 		end
 		MAKE_VER_CHECK: begin
-			counter_nxt = (repeat_check_nxt) ? 6'bx : 63;
+			counter_nxt = (repeat_check_nxt) ? 6'bx : 15;
 			state_nxt = (repeat_check_nxt) ? REPEAT_CHECK_RESET : FIND_UNCOVERED_MIN;
 		end
 		REPEAT_CHECK_RESET: begin
@@ -188,12 +197,12 @@ always_comb begin
 			state_nxt = MAKE_HOR_CHECK;
 		end
 		FIND_UNCOVERED_MIN: begin
-			counter_nxt = (counter_reg == 0) ? 6'bx : (horizontal_check_reg[counter_reg[5:3]] == 0) ? (counter_reg == 7) ? 6'bx : counter_reg - 8 : counter_reg - 1;
-			state_nxt = (counter_reg == 0) ? SUBTRACT_ADD_MIN : (horizontal_check_reg[counter_reg[5:3]] == 0 && counter_reg == 7) ? SUBTRACT_ADD_MIN : FIND_UNCOVERED_MIN;
+			counter_nxt = (can_assign) ? 7 : (counter_reg == 0) ? 6'bx : counter_reg - 1;
+			state_nxt = (can_assign) ? DFS : (counter_reg == 0) ? SUBTRACT_ADD_MIN : FIND_UNCOVERED_MIN;
 		end
 		SUBTRACT_ADD_MIN: begin
-			counter_nxt = 7;
-			state_nxt = (can_assign) ? DFS : COUNT_ZERO;
+			counter_nxt = 0;
+			state_nxt = COUNT_ZERO;
 		end
 		ARB_ASSIGN: begin
 			counter_nxt = (one_zero_row_found || counter_reg == 0) ? 7 : counter_reg - 1;
@@ -313,11 +322,15 @@ assign counter_col = counter_reg[2:0];
 assign counter_row = counter_reg[5:3];
 always_comb begin
 	if(state_reg == IDLE || state_reg == SUBTRACT_ADD_MIN) begin
-		UNCOVERED_MIN_VAL_nxt = 8'b1111_1111;
+		UNCOVERED_MIN_VAL_nxt = 7'b1111_111;
 	end
 	else if(state_reg == FIND_UNCOVERED_MIN) begin
-		UNCOVERED_MIN_VAL_nxt = (uncovered && job_cost_reg[counter_reg[5:3]][counter_reg[2:0]] < UNCOVERED_MIN_VAL_reg) ? 
-								job_cost_reg[counter_reg[5:3]][counter_reg[2:0]] : UNCOVERED_MIN_VAL_reg;
+		if(horizontal_check_reg[counter_reg[2:0]] == 1 && MIN_VAL_reg[counter_reg[2:0]] < UNCOVERED_MIN_VAL_reg) begin
+			UNCOVERED_MIN_VAL_nxt = MIN_VAL_reg[counter_reg[2:0]];
+		end
+		else begin
+			UNCOVERED_MIN_VAL_nxt = UNCOVERED_MIN_VAL_reg;
+		end
 	end
 	else begin
 		UNCOVERED_MIN_VAL_nxt = UNCOVERED_MIN_VAL_reg;
@@ -383,35 +396,11 @@ end
 // logic [3-1:0] total_zero_c, total_zero_r;
 // logic [3-1:0] col_zero_count_nxt [8-1:0], col_zero_count_reg [8-1:0], row_zero_count_nxt [8-1:0], row_zero_count_reg [8-1:0];
 // logic marked_zero_nxt [8-1:0][8-1:0], marked_zero_reg [8-1:0][8-1:0];
-always_comb begin
-	if(state_reg == ASSIGN_ROW_TASK) begin
-		assign_task_done = (row_zero_count_nxt[7] == 0 || row_zero_count_nxt[7] >= 2)
-						&& (row_zero_count_nxt[6] == 0 || row_zero_count_nxt[6] >= 2)
-						&& (row_zero_count_nxt[5] == 0 || row_zero_count_nxt[5] >= 2)
-						&& (row_zero_count_nxt[4] == 0 || row_zero_count_nxt[4] >= 2)
-						&& (row_zero_count_nxt[3] == 0 || row_zero_count_nxt[3] >= 2)
-						&& (row_zero_count_nxt[2] == 0 || row_zero_count_nxt[2] >= 2)
-						&& (row_zero_count_nxt[1] == 0 || row_zero_count_nxt[1] >= 2)
-						&& (row_zero_count_nxt[0] == 0 || row_zero_count_nxt[0] >= 2);
-	end
-	else if(state_reg == ASSIGN_COL_TASK) begin
-		assign_task_done = (col_zero_count_nxt[7] == 0 || col_zero_count_nxt[7] >= 2)
-						&& (col_zero_count_nxt[6] == 0 || col_zero_count_nxt[6] >= 2)
-						&& (col_zero_count_nxt[5] == 0 || col_zero_count_nxt[5] >= 2)
-						&& (col_zero_count_nxt[4] == 0 || col_zero_count_nxt[4] >= 2)
-						&& (col_zero_count_nxt[3] == 0 || col_zero_count_nxt[3] >= 2)
-						&& (col_zero_count_nxt[2] == 0 || col_zero_count_nxt[2] >= 2)
-						&& (col_zero_count_nxt[1] == 0 || col_zero_count_nxt[1] >= 2)
-						&& (col_zero_count_nxt[0] == 0 || col_zero_count_nxt[0] >= 2);
-	end
-	else begin
-		assign_task_done = 1'bx;
-	end
-end
+
 always_comb begin
 	if(state_reg == COUNT_ZERO) begin
-		row_zero_count_nxt = {row_zero_count_reg[6], row_zero_count_reg[5], row_zero_count_reg[4], row_zero_count_reg[3], row_zero_count_reg[2], row_zero_count_reg[1], row_zero_count_reg[0], total_zero_r};
-		col_zero_count_nxt = {col_zero_count_reg[6], col_zero_count_reg[5], col_zero_count_reg[4], col_zero_count_reg[3], col_zero_count_reg[2], col_zero_count_reg[1], col_zero_count_reg[0], total_zero_c};
+		row_zero_count_nxt = {total_zero_r[7], total_zero_r[6], total_zero_r[5], total_zero_r[4], total_zero_r[3], total_zero_r[2], total_zero_r[1], total_zero_r[0]};
+		col_zero_count_nxt = {total_zero_c[7], total_zero_c[6], total_zero_c[5], total_zero_c[4], total_zero_c[3], total_zero_c[2], total_zero_c[1], total_zero_c[0]};
 	end
 	else if(state_reg == ASSIGN_ROW_TASK) begin
 		if(row_zero_count_reg[counter_reg[2:0]] == 1) begin // the row has only one zero and can be assigned
@@ -624,6 +613,9 @@ always_comb begin
 								 || (horizontal_check_reg[0] && is_zero_ij[0][i]);
 		end
 	end
+    else if(state_reg == REPEAT_CHECK_RESET) begin
+        vertical_check_nxt = (can_assign) ? 0 : vertical_check_reg;
+    end
 	else if(state_reg == DFS) begin
 		if(hit) begin
 			vertical_check_nxt = vertical_check_reg - marked_zero_reg[counter_col];
@@ -658,6 +650,9 @@ always_comb begin
 			end
 		end
 	end
+	else if(state_reg == FIND_UNCOVERED_MIN) begin
+		vertical_check_nxt = (can_assign) ? 0 : vertical_check_reg;
+	end
 	else if(state_reg == IDLE || state_reg == SUBTRACT_ADD_MIN) begin
 		vertical_check_nxt = 0;
 	end
@@ -684,6 +679,9 @@ always_comb begin
 									 || horizontal_check_reg[i];
 		end
 	end
+    else if(state_reg == REPEAT_CHECK_RESET) begin
+        horizontal_check_nxt = horizontal_check_reg;
+    end
 	else if(state_reg == DFS) begin
 		if(hit) begin
 			for(integer i = 7; i >= 0; i = i - 1) begin
@@ -695,6 +693,9 @@ always_comb begin
 				horizontal_check_nxt[i] = (i == counter_reg[2:0]) ? 0 : horizontal_check_reg[i];
 			end
 		end
+	end
+	else if(state_reg == FIND_UNCOVERED_MIN) begin
+		horizontal_check_nxt = (can_assign) ? 0 : horizontal_check_reg;
 	end
 	else if(state_reg == IDLE || state_reg == SUBTRACT_ADD_MIN) begin
 		horizontal_check_nxt = 0;
@@ -741,7 +742,7 @@ always_comb begin
 		end
 	end
 	else begin
-		row_stat_nxt = {0, 0, 0, 0 ,0 ,0 ,0 ,0};
+		row_stat_nxt = {0, 0, 0, 0, 0, 0, 0, 0};
 	end
 end
 always_comb begin
@@ -790,10 +791,7 @@ always_comb begin
 		end
 	end
 	else if(state_reg == ARB_ASSIGN) begin
-		if(one_zero_row_found) begin
-			marked_zero_nxt = marked_zero_reg;
-		end
-		else if(row_zero_count_reg[counter_reg[2:0]] != 0) begin
+		if(row_zero_count_reg[counter_reg[2:0]] != 0) begin
 			for(integer i=7; i>=0; i=i-1) begin
 				if(i == counter_reg[2:0]) begin
 					if(is_zero_ij[i][7] && col_zero_count_reg[7] != 0) begin
@@ -840,6 +838,11 @@ always_comb begin
 			marked_zero_nxt = marked_zero_reg;
 		end
 	end
+    else if(state_reg == REPEAT_CHECK_RESET) begin
+		for(integer i=7; i>=0; i=i-1) begin
+            marked_zero_nxt[i] = (can_assign) ? 0 : marked_zero_reg[i];
+		end
+    end
 	else if(state_reg == DFS) begin
 		if(is_zero_ij[counter_col][7] && !row_stat_reg[counter_col][7] && !vertical_check_reg[7]) begin
 			for(integer i=7; i>=0; i=i-1) begin
@@ -887,7 +890,7 @@ always_comb begin
 			end
 		end
 	end
-	else if(state_reg == IDLE || state_reg == SUBTRACT_ADD_MIN) begin
+	else if(state_reg == IDLE || state_reg == FIND_UNCOVERED_MIN) begin
 		for(integer i=7; i>=0; i=i-1) begin
 			marked_zero_nxt[i] = 0;
 		end
@@ -902,8 +905,8 @@ end
 always_ff @(posedge clk or negedge rst_n) begin
 	if(!rst_n) begin
 		marked_zero_reg <= {0, 0, 0, 0, 0, 0, 0, 0};
-        row_zero_count_reg <= {0, 0, 0, 0, 0, 0, 0, 0};
-        col_zero_count_reg <= {0, 0, 0, 0, 0, 0, 0, 0};
+		row_zero_count_reg <= {0, 0, 0, 0, 0, 0, 0, 0};
+		col_zero_count_reg <= {0, 0, 0, 0, 0, 0, 0, 0};
 	end
 	else begin
 	 	row_zero_count_reg <= row_zero_count_nxt;
@@ -911,22 +914,12 @@ always_ff @(posedge clk or negedge rst_n) begin
 		marked_zero_reg <= marked_zero_nxt;
 	end
 end
-assign total_zero_r = is_zero_ij[counter_reg[2:0]][7] 
-					+ is_zero_ij[counter_reg[2:0]][6] 
-					+ is_zero_ij[counter_reg[2:0]][5] 
-					+ is_zero_ij[counter_reg[2:0]][4] 
-					+ is_zero_ij[counter_reg[2:0]][3] 
-					+ is_zero_ij[counter_reg[2:0]][2] 
-					+ is_zero_ij[counter_reg[2:0]][1] 
-					+ is_zero_ij[counter_reg[2:0]][0];
-assign total_zero_c = is_zero_ij[7][counter_reg[2:0]] 
-					+ is_zero_ij[6][counter_reg[2:0]] 
-					+ is_zero_ij[5][counter_reg[2:0]] 
-					+ is_zero_ij[4][counter_reg[2:0]] 
-					+ is_zero_ij[3][counter_reg[2:0]] 
-					+ is_zero_ij[2][counter_reg[2:0]] 
-					+ is_zero_ij[1][counter_reg[2:0]] 
-					+ is_zero_ij[0][counter_reg[2:0]];
+always_comb begin
+	for(integer i=7; i>=0; i=i-1) begin
+		total_zero_r[i] = is_zero_ij[i][7] + is_zero_ij[i][6] + is_zero_ij[i][5] + is_zero_ij[i][4] + is_zero_ij[i][3] + is_zero_ij[i][2] + is_zero_ij[i][1] + is_zero_ij[i][0];
+		total_zero_c[i] = is_zero_ij[7][i] + is_zero_ij[6][i] + is_zero_ij[5][i] + is_zero_ij[4][i] + is_zero_ij[3][i] + is_zero_ij[2][i] + is_zero_ij[1][i] + is_zero_ij[0][i];
+	end
+end
 
 // MAKE_ZERO_ROW, MAKE_ZERO_COL
 // logic [3-1:0] min_idx_nxt [8-1:0], min_idx_reg[8-1:0];
@@ -962,6 +955,21 @@ always_comb begin
 		for(integer i = 7; i >= 0; i = i - 1) begin
 			MIN_VAL_nxt[i] = (counter_reg[3] == 1 && job_cost_reg[i][counter_reg[2:0]] < MIN_VAL_reg[i]) ? job_cost_reg[i][counter_reg[2:0]] : MIN_VAL_reg[i];
 		end
+		end
+	end
+	else if(state_reg == FIND_UNCOVERED_MIN) begin
+		if(counter_reg[3] == 1) begin
+			if(vertical_check_reg[counter_reg[2:0]] == 0) begin
+				for(integer i = 7; i >= 0; i=i-1) begin
+					MIN_VAL_nxt[i] = (job_cost_reg[i][counter_reg[2:0]] < MIN_VAL_reg[i]) ? job_cost_reg[i][counter_reg[2:0]] : MIN_VAL_reg[i];
+				end
+			end
+			else begin
+				MIN_VAL_nxt = MIN_VAL_reg;
+			end
+		end
+		else begin
+			MIN_VAL_nxt = MIN_VAL_reg;
 		end
 	end
 	else begin
