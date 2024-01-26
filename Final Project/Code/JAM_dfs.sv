@@ -148,6 +148,9 @@ always_ff @(posedge clk or negedge rst_n) begin
         cost_reg <= cost_nxt;
 	end
 end
+// When total_line == 8, it means that (1)the workers already assigned(horizontal_check_reg) + (2)jobs not assigned(vertical_check_reg) == 8
+// We can make an answer by making (1) unchanged and assign (2) to the remaining workers.
+// Therefore we jump to DFS state.	
 assign total_line = (state_reg == FIND_UNCOVERED_MIN) ? horizontal_line + vertical_line : 0;
 assign vertical_line = vertical_check_reg[7] + vertical_check_reg[6] + vertical_check_reg[5] + vertical_check_reg[4] 
 				  + vertical_check_reg[3] + vertical_check_reg[2] + vertical_check_reg[1] + vertical_check_reg[0];
