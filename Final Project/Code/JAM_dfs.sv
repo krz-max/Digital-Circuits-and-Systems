@@ -23,16 +23,16 @@ output logic [9:0] out_cost;
 //   state
 //---------------------------------------------------------------------
 // 0 -> 1 -> 2 -> 3 -> 4 -> 5 -> 8 (used_line == 8) ? 9 : (covered) ? 
-parameter IDLE = 0; // done
-parameter INPUT = 1; // done
+parameter IDLE = 0;
+parameter INPUT = 1;
 parameter OUTPUT = 2;
 
-parameter MAKE_ZERO_COL = 3; // done
-parameter MAKE_ZERO_ROW = 4; // done
-parameter COUNT_ZERO = 5; // done
+parameter MAKE_ZERO_COL = 3;
+parameter MAKE_ZERO_ROW = 4;
+parameter COUNT_ZERO = 5;
 
-parameter ASSIGN_ROW_TASK = 6; // done
-parameter ASSIGN_COL_TASK = 7; // done
+parameter ASSIGN_ROW_TASK = 6;
+parameter ASSIGN_COL_TASK = 7;
 parameter MAKE_HOR_CHECK = 8;
 parameter MAKE_VER_CHECK = 9;
 parameter REPEAT_CHECK_RESET = 10;
@@ -54,32 +54,42 @@ logic [3-1:0] counter_col, counter_row;
 logic [8-1:0] job_cost_reg [8-1:0][8-1:0];
 logic [8-1:0] job_cost_nxt [8-1:0][8-1:0];
 logic [7-1:0] input_nxt[8-1:0][8-1:0], input_reg[8-1:0][8-1:0];
-logic is_zero_ij [8-1:0][8-1:0]; // check if job_cost_reg[i][j] is zero
 logic [7-1:0] in_cost_reg;
-logic [6-1:0] counter_reg, counter_nxt; 
-// MAKE_ZERO_ROW, MAKE_ZERO_COL
+logic [6-1:0] counter_reg, counter_nxt;
+
+// @brief: check if job_cost_reg[i][j] is zero
+// result: is_zero_ij[i][j] = (job_cost_reg[i][j] == 0)
+logic is_zero_ij [8-1:0][8-1:0];
+
+// @brief: store the minimum value of each row/col
+// states: MAKE_ZERO_ROW, MAKE_ZERO_COL
 logic [7-1:0] MIN_VAL_nxt [8-1:0], MIN_VAL_reg [8-1:0];
-// COUNT ZERO
-logic [4-1:0] total_zero_c [8-1:0], total_zero_r [8-1:0];
+
+
+// @brief: Store the number of zero on each row/col
+// states: COUNT_ZERO
+logic [4-1:0] total_zero_c [8-1:0], total_zero_r [8-1:0]; // range: 0~8
 logic [4-1:0] col_zero_count_nxt [8-1:0], col_zero_count_reg [8-1:0], row_zero_count_nxt [8-1:0], row_zero_count_reg [8-1:0];
-// ASSIGN_ROW_TASK
-// ASSIGN_COL_TASK
+
+// states: ASSIGN_ROW_TASK, ASSIGN_COL_TASK, ARB_ASSIGN
 logic arbitrary_assign;
+// @brief: Store the marked zero ( circled, not double quoted ) in the matrix
 logic [8-1:0] marked_zero_nxt[8-1:0], marked_zero_reg[8-1:0];
-// MAKE_CHECK
+
+// states: MAKE_CHECK
 logic [8-1:0] vertical_check_nxt, horizontal_check_nxt, vertical_check_reg, horizontal_check_reg;
 logic repeat_check_nxt, repeat_check_reg;
-// FIND_UNCOVERED_MIN
+// states: FIND_UNCOVERED_MIN
 logic [7-1:0] UNCOVERED_MIN_VAL_nxt, UNCOVERED_MIN_VAL_reg;
-// SUBTRACT_ADD_MIN
-// ASSIGN_JOB_AND_CALC_COST
+// states: SUBTRACT_ADD_MIN
+// states: ASSIGN_JOB_AND_CALC_COST
 logic [3-1:0] opt_job_reg [8-1:0], opt_job_nxt [8-1:0];
 logic uncovered;
 logic check_srcA[8-1:0], check_srcB[8-1:0];
 logic one_zero_row_found;
 // store ANS for output
 // FOJ
-// OUTPUT
+// states: OUTPUT
 logic [10-1:0] cost_nxt, cost_reg;
 logic out_valid_nxt;
 logic [4-1:0] out_job_nxt;
@@ -88,6 +98,7 @@ logic [10-1:0] out_cost_nxt;
 logic can_assign;
 logic [5-1:0] total_line;
 logic [4-1:0] vertical_line, horizontal_line;
+
 //---------------------------------------------------------------------
 //   Your design                        
 //---------------------------------------------------------------------
@@ -168,6 +179,9 @@ always_comb begin
 			counter_nxt = (counter_reg == 0) ? 0 : counter_reg - 1;
 			state_nxt = (counter_reg == 0) ? COUNT_ZERO : MAKE_ZERO_COL;
 		end
+		// min_val_reg[7:0]: min. value on "each" row/col.
+		// 15~8: Cannot directly find the minimum in every row, we update the minimum value of each row on each cycle. Each cycle we read one value and update if it is smaller than the current min. value.
+		// 7~0: Subtract the minimum value from every element.
 		MAKE_ZERO_ROW: begin
 			counter_nxt = (counter_reg == 0) ? 15 : counter_reg - 1;
 			state_nxt = (counter_reg == 0) ? MAKE_ZERO_COL : MAKE_ZERO_ROW;
@@ -402,8 +416,19 @@ always_comb begin
 		row_zero_count_nxt = {total_zero_r[7], total_zero_r[6], total_zero_r[5], total_zero_r[4], total_zero_r[3], total_zero_r[2], total_zero_r[1], total_zero_r[0]};
 		col_zero_count_nxt = {total_zero_c[7], total_zero_c[6], total_zero_c[5], total_zero_c[4], total_zero_c[3], total_zero_c[2], total_zero_c[1], total_zero_c[0]};
 	end
+	/* 
+	For current_row in 0 to 7:
+		row_zero_count_reg = #(zero) in current_row
+		If row_zero_count_reg == 1:
+			1. Update the current_row's zero count to 0(implying this row has been selected).
+			2. Update other rows' zero count if they have zero in the same column.
+			For selected_col in 0 to 7:
+				If selected_col has zero in current_row:
+					3. Update the selected_col's zero count to 0(implying this column has been selected).
+					4. Other cols' zero count remains the same.
+	 */
 	else if(state_reg == ASSIGN_ROW_TASK) begin
-		if(row_zero_count_reg[counter_reg[2:0]] == 1) begin // the row has only one zero and can be assigned
+		if(row_zero_count_reg[counter_reg[2:0]] == 1) begin
 			if(col_zero_count_reg[7] != 0 && is_zero_ij[counter_reg[2:0]][7]) begin
 				for(integer i=7; i>=0; i=i-1) begin
 					row_zero_count_nxt[i] = (i == counter_reg[2:0]) ? 0 : (is_zero_ij[i][7] && row_zero_count_reg[i] != 0) ? row_zero_count_reg[i] - 1 : row_zero_count_reg[i];
@@ -466,6 +491,17 @@ always_comb begin
 			end
 		end
 	end
+	/* 
+	For current_col in 0 to 7:
+		col_zero_count_reg = #(zero) in current_col
+		If col_zero_count_reg == 1:
+			1. Update the current_col's zero count to 0(implying this col has been selected).
+			2. Update other cols' zero count if they have zero in the same row.
+			For selected_row in 0 to 7:
+				If selected_row has zero in current_col:
+					3. Update the selected_row's zero count to 0(implying this row has been selected).
+					4. Other rows' zero count remains the same.
+	 */
 	else if(state_reg == ASSIGN_COL_TASK) begin
 		if(col_zero_count_reg[counter_reg[2:0]] == 1) begin // the col has only one zero
 			if(row_zero_count_reg[7] != 0 && is_zero_ij[7][counter_reg[2:0]]) begin
@@ -530,6 +566,9 @@ always_comb begin
 			end
 		end
 	end
+	/* 
+	
+	 */
 	else if(state_reg == ARB_ASSIGN) begin
    		if(row_zero_count_reg[counter_reg[2:0]] != 0) begin
 			if(marked_zero_nxt[counter_reg[2:0]][7] == 1) begin
@@ -794,6 +833,7 @@ always_comb begin
 		if(row_zero_count_reg[counter_reg[2:0]] != 0) begin
 			for(integer i=7; i>=0; i=i-1) begin
 				if(i == counter_reg[2:0]) begin
+					// Left([7]) to Right([0])
 					if(is_zero_ij[i][7] && col_zero_count_reg[7] != 0) begin
 						marked_zero_nxt[i] = 8'b1000_0000;
 					end
